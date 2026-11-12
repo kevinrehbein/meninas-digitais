@@ -3,20 +3,14 @@ import re
 import unicodedata
 from collections import defaultdict
 
-from dotenv import load_dotenv
+from config import NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD
 from neo4j import GraphDatabase
-
-load_dotenv()
-
-URI = os.getenv("NEO4J_URI")
-USUARIO = os.getenv("NEO4J_USERNAME")
-SENHA = os.getenv("NEO4J_PASSWORD")
 
 LABEL = "__Entity__"
 PROP_NOME = "id"
 DRY_RUN = False  # True para teste, False para unir grupos
 
-PREFIXOS = ("area de ", "area ", "local ", "projeto ", "programa ")
+PREFIXOS = ("areade", "area", "local", "localde", "projeto ", "projetode", "programa ", "acao", "acaode", "conceito", "conceitode")
 SIGLAS = {
     "sbc": "sociedadebrasileiradecomputacao",
     "ti": "tecnologiadainformacao",
@@ -91,7 +85,7 @@ def unir_grupo(session, grupo: list[dict]) -> None:
 
 
 def main() -> None:
-    driver = GraphDatabase.driver(URI, auth=(USUARIO, SENHA))
+    driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USERNAME, NEO4J_PASSWORD))
     try:
         with driver.session() as session:
             grupos = buscar_grupos(session)

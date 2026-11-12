@@ -87,7 +87,7 @@ def fmt(c):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--n", type=int, default=3, help="nº de perguntas (0 = todas)")
+    ap.add_argument("--n", type=int, default=0, help="nº de perguntas (0 = todas)")
     n = ap.parse_args().n
 
     todas = [
