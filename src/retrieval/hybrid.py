@@ -165,24 +165,24 @@ class HybridRetriever:
         eids = [e["eid"] for e in nos_entrada]
 
         relacoes: list[dict] = []
-        chunks_extras: list[dict] = []
+        # chunks_extras: list[dict] = []
         if eids:
             relacoes = self._relacoes_do_grafo(eids, vec)
-            todos = set(eids)
-            for r in relacoes:
-                todos.update((r["eid_origem"], r["eid_destino"]))
-            chunks_extras = self._chunks_do_grafo(
-                list(todos), excluir=[c["id"] for c in chunks_base], vec=vec
-            )
+            # todos = set(eids)
+            # for r in relacoes:
+            #     todos.update((r["eid_origem"], r["eid_destino"]))
+            # chunks_extras = self._chunks_do_grafo(
+            #     list(todos), excluir=[c["id"] for c in chunks_base], vec=vec
+            # )
 
-        chunks = self._ordenar_por_score(chunks_base + chunks_extras, um_por_artigo)
+        chunks = self._ordenar_por_score(chunks_base, um_por_artigo)
 
         logger.debug(
             "GraphRAG: %d chunks, %d entidades, %d relações, %d chunks extras",
             len(chunks_base),
             len(nos_entrada),
             len(relacoes),
-            len(chunks_extras),
+            # len(chunks_extras),
         )
         return self._formatar_relacoes(nos_entrada, relacoes) + self._formatar_chunks(
             chunks, pergunta

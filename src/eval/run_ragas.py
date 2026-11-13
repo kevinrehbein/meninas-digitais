@@ -14,7 +14,10 @@ from ragas.embeddings import LangchainEmbeddingsWrapper
 from ragas.llms import LangchainLLMWrapper
 from ragas.metrics import (
     ContextRelevance,
+    ContextUtilization,
+    Faithfulness,
     LLMContextPrecisionWithReference,
+    ResponseRelevancy,
 )
 from ragas.run_config import RunConfig
 
@@ -75,14 +78,24 @@ def hibrido(vec):
     base = r._chunks_entrada(vec)
     entradas = r._entidades_entrada(vec)
     eids = [e["eid"] for e in entradas]
+
     if not eids:
         return base, ""
+
     rels = r._relacoes_do_grafo(eids, vec)
-    todos = set(eids)
-    for rel in rels:
-        todos.update((rel["eid_origem"], rel["eid_destino"]))
-    extras = r._chunks_do_grafo(list(todos), [c["id"] for c in base], vec)
-    return r._ordenar_por_score(base + extras), r._formatar_relacoes(entradas, rels)
+
+    # --- EXPERIMENTO: Desativado o resgate de chunks por nós do grafo ---
+    # Para focar 100% do orçamento de texto no Vector Search (TOP_K = 10)
+    # e usar o grafo apenas para injeção de contexto estrutural.
+    #
+    # todos = set(eids)
+    # for rel in rels:
+    #     todos.update((rel["eid_origem"], rel["eid_destino"]))
+    # extras = r._chunks_do_grafo(list(todos), [c["id"] for c in base], vec)
+    # return r._ordenar_por_score(base + extras), r._formatar_relacoes(entradas, rels)
+    # ----------------------------------------------------------------------
+
+    return r._ordenar_por_score(base), r._formatar_relacoes(entradas, rels)
 
 
 def fmt(c):
@@ -104,9 +117,12 @@ if __name__ == "__main__":
 
     emb.embed_query("ping")
     juiz, juiz_emb = LangchainLLMWrapper(judge_llm), LangchainEmbeddingsWrapper(emb) # pyright: ignore[reportArgumentType]
+
     metricas = [
         Faithfulness(llm=juiz),
         ResponseRelevancy(llm=juiz, embeddings=juiz_emb),
+        ContextRelevance(llm=juiz),
+        ContextUtilization(llm=juiz)
     ]
 
     res_consolidados = {}
