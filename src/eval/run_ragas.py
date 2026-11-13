@@ -38,13 +38,6 @@ Trechos dos artigos:
 Pergunta: {pergunta}
 Resposta:"""
 
-Q_SEMANTICO = """
-MATCH (d:Document)
-    SEARCH d IN (VECTOR INDEX chunk_embedding FOR $vec LIMIT $k)
-    SCORE AS score
-OPTIONAL MATCH (d)-[:PARTE_DE]->(a:Artigo)
-RETURN d.id AS id, d.text AS texto, a.titulo AS titulo, a.url_artigo AS url
-"""
 
 # Um único event loop para toda a execução: o cliente AsyncOpenAI mantém
 # conexões atreladas ao loop, então asyncio.run() a cada chamada quebraria
@@ -94,32 +87,19 @@ judge_llm = llm_factory(
 )
 
 def semantico(vec):
-    # mesmo orçamento de chunks do híbrido
-    return r.graph.query(Q_SEMANTICO, {"vec": vec, "k": TOP_K + K_GRAFO}), ""
+    return r._chunks_entrada(vec), ""
 
 
 def hibrido(vec):
     base = r._chunks_entrada(vec)
     entradas = r._entidades_entrada(vec)
-    eids = [e["eid"] for e in entradas]
+    seeds = [{"eid": e["eid"], "score": e["score"]} for e in entradas]
 
-    if not eids:
+    if not seeds:
         return base, ""
 
-    rels = r._relacoes_do_grafo(eids, vec)
-
-    # --- EXPERIMENTO: Desativado o resgate de chunks por nós do grafo ---
-    # Para focar 100% do orçamento de texto no Vector Search (TOP_K = 10)
-    # e usar o grafo apenas para injeção de contexto estrutural.
-    #
-    # todos = set(eids)
-    # for rel in rels:
-    #     todos.update((rel["eid_origem"], rel["eid_destino"]))
-    # extras = r._chunks_do_grafo(list(todos), [c["id"] for c in base], vec)
-    # return r._ordenar_por_score(base + extras), r._formatar_relacoes(entradas, rels)
-    # ----------------------------------------------------------------------
-
-    return r._ordenar_por_score(base), r._formatar_relacoes(entradas, rels)
+    rels = r._relacoes_do_grafo(seeds, vec)
+    return base, r._formatar_relacoes(entradas, rels)
 
 
 def fmt(c):
@@ -232,6 +212,7 @@ if __name__ == "__main__":
                     {
                         "id": q_id,
                         "user_input": q["pergunta"],
+                        "contextos": json.dumps(contextos, ensure_ascii=False),
                         "response": resposta,
                         **notas,
                     }

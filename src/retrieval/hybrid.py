@@ -3,7 +3,6 @@ import threading
 
 from config import (
     EMBEDDING_SPACE,
-    K_GRAFO,
     MAX_RELACOES,
     N_ENTIDADES,
     RELACOES_POR_ENTIDADE,
@@ -44,7 +43,8 @@ class HybridRetriever:
                 SEARCH d IN (VECTOR INDEX chunk_embedding FOR $vec LIMIT $k)
                 SCORE AS score
             OPTIONAL MATCH (d)-[:PARTE_DE]->(a:Artigo)
-            RETURN d.id AS id, d.text AS texto, score, a.titulo AS titulo, a.url_artigo AS url
+            RETURN d.id AS id, d.text AS texto, a.titulo AS titulo, a.url_artigo AS url, score
+            ORDER BY score DESC
             """,
             {"k": TOP_K, "vec": vec},
         )
@@ -91,6 +91,7 @@ class HybridRetriever:
             },
         )
 
+    '''
     def _chunks_do_grafo(self, ents: list[str], excluir: list[str], vec: list[float]) -> list[dict]:
         return self.graph.query(
             """
@@ -108,15 +109,13 @@ class HybridRetriever:
             """,
             {"ents": ents, "excluir": excluir, "k": K_GRAFO, "vec": vec},
         )
+    '''
 
     @staticmethod
-    def _ordenar_por_score(chunks: list[dict], um_por_artigo: bool = False) -> list[dict]:
-        ordenados = sorted(chunks, key=lambda c: c.get("score") or 0.0, reverse=True)
-        if not um_por_artigo:
-            return ordenados
+    def _filtrar_um_por_artigo(chunks: list[dict]) -> list[dict]:
         vistos: set[str] = set()
         saida = []
-        for c in ordenados:
+        for c in chunks:  # já chegam ordenados por score DESC do Cypher
             chave = c.get("titulo") or c["id"]
             if chave not in vistos:
                 vistos.add(chave)
@@ -176,10 +175,12 @@ class HybridRetriever:
             #     list(todos), excluir=[c["id"] for c in chunks_base], vec=vec
             # )
 
-        chunks = self._ordenar_por_score(chunks_base, um_por_artigo)
+        chunks = (
+            self._filtrar_um_por_artigo(chunks_base) if um_por_artigo else chunks_base
+        )
 
         logger.debug(
-            "GraphRAG: %d chunks, %d entidades, %d relações, %d chunks extras",
+            "GraphRAG: %d chunks, %d entidades, %d relações",
             len(chunks_base),
             len(nos_entrada),
             len(relacoes),
