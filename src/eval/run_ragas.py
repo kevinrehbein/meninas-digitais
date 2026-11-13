@@ -11,11 +11,11 @@ from openai import OpenAI
 from ragas import EvaluationDataset, SingleTurnSample, evaluate
 from ragas.embeddings import LangchainEmbeddingsWrapper
 from ragas.llms import llm_factory
-from ragas.metrics import (
+from ragas.metrics.collections import (
     ContextRelevance,
     ContextUtilization,
     Faithfulness,
-    ResponseRelevancy,
+    AnswerRelevancy,
 )
 from ragas.run_config import RunConfig
 
@@ -52,14 +52,16 @@ r = HybridRetriever.get_instance()
 emb = r.embedding_model
 
 gen_llm = init_chat_model(
-    model="gemma-4-31b-it",
-    model_provider="google_genai",
+    model="gemma4:12b",
+    model_provider="ollama",
+    base_url="http://localhost:11434",
     temperature=0,
-    max_retries=5,
+    num_ctx=24576,
+    num_predict=4096,
 )
 
 # Cliente conectado ao Ollama
-client = OpenAI(base_url="http://localhost:11434/v1", api_key="ollama")
+client = OpenAI(base_url="http://localhost:11435/v1", api_key="ollama")
 
 judge_llm = llm_factory(
     model="qwen3.5:9b-q8_0",
@@ -123,7 +125,7 @@ if __name__ == "__main__":
 
     metricas = [
         Faithfulness(llm=juiz),
-        ResponseRelevancy(llm=juiz, embeddings=juiz_emb),
+        AnswerRelevancy(llm=juiz, embeddings=juiz_emb),
         ContextRelevance(llm=juiz),
         ContextUtilization(llm=juiz),
     ]
