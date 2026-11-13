@@ -7,9 +7,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # raiz = src/
 
 import pandas as pd
 from langchain.chat_models import init_chat_model
+from openai import OpenAI
 from ragas import EvaluationDataset, SingleTurnSample, evaluate
 from ragas.embeddings import LangchainEmbeddingsWrapper
-from ragas.llms import LangchainLLMWrapper, llm_factory
+from ragas.llms import llm_factory
 from ragas.metrics import (
     ContextRelevance,
     ContextUtilization,
@@ -56,8 +57,6 @@ gen_llm = init_chat_model(
     temperature=0,
     max_retries=5,
 )
-
-from openai import OpenAI
 
 # Cliente conectado ao Ollama
 client = OpenAI(base_url="http://localhost:11434/v1", api_key="ollama")
