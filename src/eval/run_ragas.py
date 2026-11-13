@@ -87,9 +87,11 @@ judge_llm = llm_factory(
     provider="openai",
     client=client,
     temperature=0.0,
-    max_tokens=4096,
+    max_tokens=16384,
+    # Desliga o thinking do juiz (Ollama /v1). Testado: só reasoning_effort
+    # funciona; extra_body={"think": False} é ignorado nesta versão.
+    reasoning_effort="none",
 )
-
 
 def semantico(vec):
     # mesmo orçamento de chunks do híbrido
