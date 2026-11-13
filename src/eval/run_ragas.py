@@ -9,7 +9,7 @@ import pandas as pd
 from langchain.chat_models import init_chat_model
 from openai import OpenAI
 from ragas import EvaluationDataset, SingleTurnSample, evaluate
-from ragas.embeddings import LangchainEmbeddingsWrapper
+from ragas.embeddings import BaseRagasEmbedding
 from ragas.llms import llm_factory
 from ragas.metrics.collections import (
     ContextRelevance,
@@ -46,6 +46,17 @@ MATCH (d:Document)
 OPTIONAL MATCH (d)-[:PARTE_DE]->(a:Artigo)
 RETURN d.id AS id, d.text AS texto, a.titulo AS titulo, a.url_artigo AS url
 """
+
+class RagasEmbAdapter(BaseRagasEmbedding):
+    def __init__(self, lc_emb):
+        super().__init__()
+        self.lc_emb = lc_emb
+
+    def embed_text(self, text: str, **kwargs) -> list[float]:
+        return self.lc_emb.embed_query(text)
+
+    async def aembed_text(self, text: str, **kwargs) -> list[float]:
+        return await self.lc_emb.aembed_query(text)
 
 validate_config()
 r = HybridRetriever.get_instance()
@@ -121,7 +132,7 @@ if __name__ == "__main__":
     )
 
     emb.embed_query("ping")
-    juiz, juiz_emb = judge_llm, LangchainEmbeddingsWrapper(emb)
+    juiz, juiz_emb = judge_llm, RagasEmbAdapter(emb)
 
     metricas = [
         Faithfulness(llm=juiz),

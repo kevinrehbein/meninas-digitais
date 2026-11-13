@@ -57,32 +57,33 @@ class HybridRetriever:
                 SCORE AS score
             WHERE score >= $min AND e.grau <= $teto
             RETURN elementId(e) AS eid, e.id AS nome,
-                   coalesce(e.descricao, '') AS descricao, score
+                coalesce(e.descricao, '') AS descricao, score
             """,
             {"n": N_ENTIDADES, "vec": vec, "min": SCORE_MIN, "teto": TETO_GRAU},
         )
 
-    def _relacoes_do_grafo(self, eids: list[str], vec: list[float]) -> list[dict]:
+    def _relacoes_do_grafo(self, seeds: list[dict], vec: list[float]) -> list[dict]:
         return self.graph.query(
             """
-            MATCH (e:__Entity__) WHERE elementId(e) IN $eids
+            UNWIND $seeds AS s
+            MATCH (e:__Entity__) WHERE elementId(e) = s.eid
             MATCH (e)-[r]-(v:__Entity__)
             WHERE v.grau <= $teto AND v.embedding IS NOT NULL
-            WITH e, r, vector.similarity.cosine(v.embedding, $vec) AS sim
-            ORDER BY sim DESC
-            WITH e, collect({r: r, sim: sim})[..$por_entidade] AS top
+            WITH e, r, s.score * vector.similarity.cosine(v.embedding, $vec) AS pontos
+            ORDER BY pontos DESC
+            WITH e, collect({r: r, pontos: pontos})[..$por_entidade] AS top
             UNWIND top AS t
-            WITH t.r AS r, max(t.sim) AS sim
-            ORDER BY sim DESC
+            WITH t.r AS r, max(t.pontos) AS pontos
+            ORDER BY pontos DESC
             LIMIT $max
             RETURN startNode(r).id AS origem, type(r) AS rel, endNode(r).id AS destino,
-                   coalesce(startNode(r).descricao, '') AS desc_origem,
-                   coalesce(endNode(r).descricao, '') AS desc_destino,
-                   elementId(startNode(r)) AS eid_origem,
-                   elementId(endNode(r)) AS eid_destino, sim
+                coalesce(startNode(r).descricao, '') AS desc_origem,
+                coalesce(endNode(r).descricao, '') AS desc_destino,
+                elementId(startNode(r)) AS eid_origem,
+                elementId(endNode(r)) AS eid_destino, pontos
             """,
             {
-                "eids": eids,
+                "seeds": seeds,
                 "vec": vec,
                 "teto": TETO_GRAU,
                 "por_entidade": RELACOES_POR_ENTIDADE,
@@ -162,12 +163,12 @@ class HybridRetriever:
 
         chunks_base = self._chunks_entrada(vec)
         nos_entrada = self._entidades_entrada(vec)
-        eids = [e["eid"] for e in nos_entrada]
+        seeds = [{"eid": r["eid"], "score": r["score"]} for r in nos_entrada]
 
         relacoes: list[dict] = []
         # chunks_extras: list[dict] = []
-        if eids:
-            relacoes = self._relacoes_do_grafo(eids, vec)
+        if seeds:
+            relacoes = self._relacoes_do_grafo(seeds, vec)
             # todos = set(eids)
             # for r in relacoes:
             #     todos.update((r["eid_origem"], r["eid_destino"]))
