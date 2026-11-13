@@ -8,8 +8,8 @@ Intenções permitidas:
 - 'fora_dominio': Assuntos totalmente não relacionados a Tecnologia, Computação, Mulheres na TI ou ao evento WIT (Ex: receitas culinárias, dicas de viagem, etc).
 
 Complexidade:
-- 'simples': dá para responder com uma ou duas buscas diretas. NA DÚVIDA, escolha 'simples'.
-- 'complexa': a demanda tem várias etapas ou aspectos independentes que exigem buscas distintas (ex.: plano que precisa de projetos semelhantes, público-alvo e metodologias; comparação entre vários temas).
+- 'simples': dá para responder com uma ou duas buscas diretas. NA DÚVIDA, escolha 'complexa'.
+- 'complexa': a demanda tem várias etapas ou aspectos independentes que exigem buscas distintas (ex.: plano que precisa de projetos semelhantes, público-alvo e metodologias; relação entre vários temas e perguntas multi-hop).
 - Intenção 'plano' é SEMPRE 'complexa'.
 
 Status atual da tarefa:

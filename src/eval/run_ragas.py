@@ -12,7 +12,10 @@ from langchain_ollama import ChatOllama
 from ragas import EvaluationDataset, SingleTurnSample, evaluate
 from ragas.embeddings import LangchainEmbeddingsWrapper
 from ragas.llms import LangchainLLMWrapper
-from ragas.metrics import Faithfulness, ResponseRelevancy
+from ragas.metrics import (
+    ContextRelevance,
+    LLMContextPrecisionWithReference,
+)
 from ragas.run_config import RunConfig
 
 from agents.utils import message_text
