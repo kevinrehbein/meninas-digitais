@@ -18,6 +18,7 @@ dependencies = [
     "langchain[google-genai,ollama]>=1.4.0",
     "langgraph>=1.2.16",
     "langgraph-cli[inmem]>=0.4.38",
+    "litellm>=1.109.1",
     "pillow<13.0.0",
     "pymupdf>=2.0",
     "pymupdf4llm>=2.0",

@@ -1,22 +1,19 @@
 import argparse
 import json
-import os
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # raiz = src/
 
-from langchain.chat_models import init_chat_model
 import pandas as pd
-from langchain_ollama import ChatOllama
+from langchain.chat_models import init_chat_model
 from ragas import EvaluationDataset, SingleTurnSample, evaluate
 from ragas.embeddings import LangchainEmbeddingsWrapper
-from ragas.llms import LangchainLLMWrapper
+from ragas.llms import LangchainLLMWrapper, llm_factory
 from ragas.metrics import (
     ContextRelevance,
     ContextUtilization,
     Faithfulness,
-    LLMContextPrecisionWithReference,
     ResponseRelevancy,
 )
 from ragas.run_config import RunConfig
@@ -54,18 +51,23 @@ r = HybridRetriever.get_instance()
 emb = r.embedding_model
 
 gen_llm = init_chat_model(
-    model="gemini-3.5-flash-lite",
+    model="gemma-4-31b-it",
     model_provider="google_genai",
     temperature=0,
     max_retries=5,
 )
 
-judge_llm = ChatOllama(
+from openai import OpenAI
+
+# Cliente conectado ao Ollama
+client = OpenAI(base_url="http://localhost:11434/v1", api_key="ollama")
+
+judge_llm = llm_factory(
     model="qwen3.5:9b-q8_0",
-    reasoning=False,
-    temperature=0,
-    num_ctx=16384,
-    num_predict=4096,
+    provider="openai",
+    client=client,
+    temperature=0.0,
+    max_tokens=4096,
 )
 
 
@@ -113,16 +115,18 @@ if __name__ == "__main__":
         if l.strip()
     ]
     perguntas = todas[:n] if n else todas
-    print(f"Dataset carregado: {len(perguntas)} pergunta(s) selecionada(s).", flush=True)
+    print(
+        f"Dataset carregado: {len(perguntas)} pergunta(s) selecionada(s).", flush=True
+    )
 
     emb.embed_query("ping")
-    juiz, juiz_emb = LangchainLLMWrapper(judge_llm), LangchainEmbeddingsWrapper(emb) # pyright: ignore[reportArgumentType]
+    juiz, juiz_emb = judge_llm, LangchainEmbeddingsWrapper(emb)
 
     metricas = [
         Faithfulness(llm=juiz),
         ResponseRelevancy(llm=juiz, embeddings=juiz_emb),
         ContextRelevance(llm=juiz),
-        ContextUtilization(llm=juiz)
+        ContextUtilization(llm=juiz),
     ]
 
     res_consolidados = {}
@@ -150,7 +154,10 @@ if __name__ == "__main__":
 
             # 1. Recuperação e Geração
             chunks, rels = fn(emb.embed_query(q["pergunta"]))
-            print(f"ID {q_id} | Chunks: {len(chunks)} | Rels: {bool(rels)} -> Gerando resposta...", flush=True)
+            print(
+                f"ID {q_id} | Chunks: {len(chunks)} | Rels: {bool(rels)} -> Gerando resposta...",
+                flush=True,
+            )
 
             prompt = PROMPT.format(
                 relacoes=f"{rels}\n" if rels else "",
@@ -179,7 +186,9 @@ if __name__ == "__main__":
 
             # 3. Gravação passo a passo (Append)
             incluir_cabecalho = not arquivo_csv.exists()
-            df_resultado.to_csv(arquivo_csv, mode="a", index=False, header=incluir_cabecalho)
+            df_resultado.to_csv(
+                arquivo_csv, mode="a", index=False, header=incluir_cabecalho
+            )
             processados.add(q_id)
             print(f"Linha salva em {arquivo_csv.name}")
 
@@ -190,11 +199,16 @@ if __name__ == "__main__":
     # Gera a tabela final comparativa e as médias
     cols = list(res_consolidados["semantico"].select_dtypes("number").columns)
     if "id" in cols:
-        cols.remove("id") # Evita calcular média do ID caso ele seja numérico
+        cols.remove("id")  # Evita calcular média do ID caso ele seja numérico
 
-    tabela = pd.concat({k: v.set_index("id")[cols] for k, v in res_consolidados.items()}, axis=1).round(3)
+    tabela = pd.concat(
+        {k: v.set_index("id")[cols] for k, v in res_consolidados.items()}, axis=1
+    ).round(3)
     tabela.to_csv(ROOT / "ragas_por_pergunta.csv")
     print("Execução finalizada com sucesso!", flush=True)
 
     print("\nPor pergunta:\n", tabela)
-    print("\nMédia:\n", pd.DataFrame({k: v[cols].mean() for k, v in res_consolidados.items()}).round(3))
+    print(
+        "\nMédia:\n",
+        pd.DataFrame({k: v[cols].mean() for k, v in res_consolidados.items()}).round(3),
+    )
