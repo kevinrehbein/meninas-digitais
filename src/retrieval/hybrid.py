@@ -97,15 +97,12 @@ class HybridRetriever:
             UNWIND $ents AS eid
             MATCH (x:__Entity__) WHERE elementId(x) = eid
             MATCH (d:Document)-[:MENTIONS]->(x)
-                WHERE NOT d.id IN $excluir
-            WITH d, sum(1.0 / log(1 + CASE WHEN coalesce(x.n_mentions, 0) < 1
-                                           THEN 1 ELSE x.n_mentions END)) AS relevancia
-            ORDER BY relevancia DESC
+            WHERE NOT d.id IN $excluir
+            WITH d,
+                count(DISTINCT x) AS cobertura,
+                coalesce(vector.similarity.cosine(d.embedding, $vec), 0.0) AS score
+            ORDER BY score DESC, cobertura DESC
             LIMIT $k
-            OPTIONAL MATCH (d)-[:PARTE_DE]->(a:Artigo)
-            RETURN d.id AS id, d.text AS texto, relevancia,
-                coalesce(vector.similarity.cosine(d.embedding, $vec), 0.0) AS score,
-                a.titulo AS titulo, a.url_artigo AS url
             """,
             {"ents": ents, "excluir": excluir, "k": K_GRAFO, "vec": vec},
         )
