@@ -1,4 +1,5 @@
 import argparse
+import asyncio
 import json
 import sys
 from pathlib import Path
@@ -7,17 +8,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # raiz = src/
 
 import pandas as pd
 from langchain.chat_models import init_chat_model
-from openai import OpenAI
-from ragas import EvaluationDataset, SingleTurnSample, evaluate
+from openai import AsyncOpenAI
 from ragas.embeddings import BaseRagasEmbedding
 from ragas.llms import llm_factory
 from ragas.metrics.collections import (
+    AnswerRelevancy,
     ContextRelevance,
     ContextUtilization,
     Faithfulness,
-    AnswerRelevancy,
 )
-from ragas.run_config import RunConfig
 
 from agents.utils import message_text
 from config import K_GRAFO, TOP_K, validate_config
@@ -47,6 +46,13 @@ OPTIONAL MATCH (d)-[:PARTE_DE]->(a:Artigo)
 RETURN d.id AS id, d.text AS texto, a.titulo AS titulo, a.url_artigo AS url
 """
 
+# Um único event loop para toda a execução: o cliente AsyncOpenAI mantém
+# conexões atreladas ao loop, então asyncio.run() a cada chamada quebraria
+# ("Event loop is closed") a partir da segunda pergunta.
+LOOP = asyncio.new_event_loop()
+asyncio.set_event_loop(LOOP)
+
+
 class RagasEmbAdapter(BaseRagasEmbedding):
     def __init__(self, lc_emb):
         super().__init__()
@@ -57,6 +63,7 @@ class RagasEmbAdapter(BaseRagasEmbedding):
 
     async def aembed_text(self, text: str, **kwargs) -> list[float]:
         return await self.lc_emb.aembed_query(text)
+
 
 validate_config()
 r = HybridRetriever.get_instance()
@@ -69,10 +76,11 @@ gen_llm = init_chat_model(
     temperature=0,
     num_ctx=24576,
     num_predict=4096,
+    reasoning=False,  # evita que o thinking consuma num_predict e deixe a resposta vazia
 )
 
-# Cliente conectado ao Ollama
-client = OpenAI(base_url="http://localhost:11435/v1", api_key="ollama")
+# Cliente assíncrono conectado ao Ollama (as métricas `collections` usam ascore)
+client = AsyncOpenAI(base_url="http://localhost:11435/v1", api_key="ollama")
 
 judge_llm = llm_factory(
     model="qwen3.5:9b-q8_0",
@@ -114,6 +122,31 @@ def hibrido(vec):
 
 def fmt(c):
     return f"[FONTE: {c.get('titulo') or 'Sem título'} | {c.get('url') or ''}]\n{c['texto']}"
+
+
+def avaliar(metricas, pergunta, resposta, contextos):
+    """Roda cada métrica isoladamente; uma falha não derruba as demais."""
+    f, ar, cr, cu = metricas
+    chamadas = {
+        "faithfulness": lambda: f.ascore(
+            user_input=pergunta, response=resposta, retrieved_contexts=contextos
+        ),
+        "answer_relevancy": lambda: ar.ascore(user_input=pergunta, response=resposta),
+        "context_relevance": lambda: cr.ascore(
+            user_input=pergunta, retrieved_contexts=contextos
+        ),
+        "context_utilization": lambda: cu.ascore(
+            user_input=pergunta, response=resposta, retrieved_contexts=contextos
+        ),
+    }
+    out = {}
+    for nome, fn in chamadas.items():
+        try:
+            out[nome] = LOOP.run_until_complete(fn()).value
+        except Exception as e:
+            print(f"  [{nome}] falhou: {e!r}", flush=True)
+            out[nome] = float("nan")
+    return out
 
 
 if __name__ == "__main__":
@@ -176,24 +209,32 @@ if __name__ == "__main__":
                 contexto="\n\n".join(map(fmt, chunks)),
                 pergunta=q["pergunta"],
             )
-            resposta = message_text(gen_llm.invoke(prompt))
-            print(f"Resposta gerada: {len(resposta)} chars).", flush=True)
+            resposta = message_text(gen_llm.invoke(prompt)).strip()
+            print(f"Resposta gerada: {len(resposta)} chars.", flush=True)
 
-            amostra = SingleTurnSample(
-                user_input=q["pergunta"],
-                response=resposta,
-                retrieved_contexts=[fmt(c) for c in chunks] + ([rels] if rels else []),
-            )
+            # Resposta vazia não é avaliada nem salva, para ser refeita na retomada
+            if not resposta:
+                print(
+                    f"ID {q_id}: resposta vazia, pulando (não será salva).", flush=True
+                )
+                continue
+
+            contextos = [fmt(c) for c in chunks] + ([rels] if rels else [])
 
             # 2. Avaliação de amostra única
-            print("Avaliando métricas RAGAS no juiz")
-            df_resultado = evaluate(
-                EvaluationDataset(samples=[amostra]),
-                metrics=metricas,
-                run_config=RunConfig(max_workers=1, timeout=500),
-            ).to_pandas()
+            print("Avaliando métricas RAGAS no juiz", flush=True)
+            notas = avaliar(metricas, q["pergunta"], resposta, contextos)
 
-            df_resultado.insert(0, "id", q_id)
+            df_resultado = pd.DataFrame(
+                [
+                    {
+                        "id": q_id,
+                        "user_input": q["pergunta"],
+                        "response": resposta,
+                        **notas,
+                    }
+                ]
+            )
             print("RAGAS concluído", flush=True)
 
             # 3. Gravação passo a passo (Append)
@@ -206,6 +247,9 @@ if __name__ == "__main__":
 
         # Carrega o dataset completo daquele sistema para a tabela final
         print("\nGerando consolidação final e médias...", flush=True)
+        if not arquivo_csv.exists():
+            print(f"Nenhum resultado salvo para {nome}; abortando consolidação.")
+            sys.exit(1)
         res_consolidados[nome] = pd.read_csv(arquivo_csv)
 
     # Gera a tabela final comparativa e as médias
