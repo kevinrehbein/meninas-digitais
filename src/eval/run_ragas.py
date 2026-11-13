@@ -59,6 +59,7 @@ judge_llm = ChatOllama(
     reasoning=False,
     temperature=0,
     num_ctx=16384,
+    num_predict=4096,
 )
 
 
