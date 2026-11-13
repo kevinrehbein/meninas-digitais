@@ -91,7 +91,6 @@ class HybridRetriever:
         )
 
     def _chunks_do_grafo(self, ents: list[str], excluir: list[str], vec: list[float]) -> list[dict]:
-        # O CASE evita log(1) = 0 -> divisão por zero quando n_mentions é 0/nulo.
         return self.graph.query(
             """
             UNWIND $ents AS eid
@@ -99,10 +98,12 @@ class HybridRetriever:
             MATCH (d:Document)-[:MENTIONS]->(x)
             WHERE NOT d.id IN $excluir
             WITH d,
-                count(DISTINCT x) AS cobertura,
-                coalesce(vector.similarity.cosine(d.embedding, $vec), 0.0) AS score
+                 count(DISTINCT x) AS cobertura,
+                 coalesce(vector.similarity.cosine(d.embedding, $vec), 0.0) AS score
             ORDER BY score DESC, cobertura DESC
             LIMIT $k
+            OPTIONAL MATCH (d)-[:PARTE_DE]->(a:Artigo)
+            RETURN d.id AS id, d.text AS texto, a.titulo AS titulo, a.url_artigo AS url, score
             """,
             {"ents": ents, "excluir": excluir, "k": K_GRAFO, "vec": vec},
         )
