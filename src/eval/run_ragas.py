@@ -55,7 +55,7 @@ gen_llm = init_chat_model(
 )
 
 judge_llm = ChatOllama(
-    model="qwen3.5:9b",
+    model="qwen3.5:9b-q8_0",
     reasoning=False,
     temperature=0,
     num_ctx=16384,
