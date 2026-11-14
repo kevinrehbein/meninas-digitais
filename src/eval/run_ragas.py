@@ -32,7 +32,7 @@ resposta, diga que não encontrou.
 Regras:
 - Analise TODOS os trechos e relações fornecidos antes de responder, extraindo itens de todos os artigos relevantes.
 - Extraia de cada item encontrado nomes próprios de projetos, ações, locais e instituições.
-- Depois de cada item, cite obrigatoriamente a fonte no formato: [FONTE: Título exato do artigo].
+- Depois de cada item, cite obrigatoriamente a fonte no formato: [FONTE: Título exato do artigo]. Use apenas títulos de artigos (nunca nomes de entidades do grafo).
 
 {relacoes}
 
@@ -98,7 +98,8 @@ def hibrido(vec):
         return base, ""
 
     rels = r._relacoes_do_grafo(seeds, vec)
-    return base, r._formatar_relacoes(entradas, rels)
+    fontes = r._fontes_das_entidades(rels) if rels else {}
+    return base, r._formatar_relacoes(entradas, rels, fontes)
 
 
 def fmt(c):

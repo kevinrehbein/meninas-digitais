@@ -91,6 +91,24 @@ class HybridRetriever:
             },
         )
 
+    def _fontes_das_entidades(self, relacoes: list[dict]) -> dict[str, list[str]]:
+        eids = {r["eid_origem"] for r in relacoes} | {
+            r["eid_destino"] for r in relacoes
+        }
+        rows = self.graph.query(
+            """
+            UNWIND $eids AS eid
+            MATCH (x:__Entity__) WHERE elementId(x) = eid
+            MATCH (d:Document)-[:MENTIONS]->(x)
+            MATCH (d)-[:PARTE_DE]->(a:Artigo)
+            WITH eid, a.titulo AS titulo, count(*) AS n
+            ORDER BY n DESC
+            RETURN eid, collect(titulo)[..3] AS titulos
+            """,
+            {"eids": list(eids)},
+        )
+        return {r["eid"]: r["titulos"] for r in rows}
+
     '''
     def _chunks_do_grafo(self, ents: list[str], excluir: list[str], vec: list[float]) -> list[dict]:
         return self.graph.query(
@@ -115,7 +133,7 @@ class HybridRetriever:
     def _filtrar_um_por_artigo(chunks: list[dict]) -> list[dict]:
         vistos: set[str] = set()
         saida = []
-        for c in chunks:  # já chegam ordenados por score DESC do Cypher
+        for c in chunks:  # já chegam ordenados por score
             chave = c.get("titulo") or c["id"]
             if chave not in vistos:
                 vistos.add(chave)
@@ -123,27 +141,41 @@ class HybridRetriever:
         return saida
 
     @staticmethod
-    def _formatar_relacoes(nos_entrada: list[dict], relacoes: list[dict]) -> str:
+    def _formatar_relacoes(
+        nos_entrada: list[dict], relacoes: list[dict], fontes: dict | None = None
+    ) -> str:
         if not relacoes:
             return ""
+        fontes = fontes or {}
+        sementes = {e["eid"]: e for e in nos_entrada}
+        vistos: set[str] = set()
 
-        descricoes = {
-            e["nome"]: e["descricao"] for e in nos_entrada if e.get("descricao")
-        }
-        for rel in relacoes:
-            if rel["desc_origem"]:
-                descricoes.setdefault(rel["origem"], rel["desc_origem"])
-            if rel["desc_destino"]:
-                descricoes.setdefault(rel["destino"], rel["desc_destino"])
+        def no(nome: str, desc: str, eid: str) -> str:
+            if eid in vistos:  # descrição e fonte só na primeira vez
+                return nome
+            vistos.add(eid)
+            fonte = "".join(f" [FONTE: {t}]" for t in fontes.get(eid, []))
+            return f"{nome}: {desc}{fonte}" if desc else f"{nome}{fonte}"
 
-        bloco_entidades = "\n".join(f"- {n}: {d}" for n, d in descricoes.items())
-        bloco_relacoes = "\n".join(
-            f"{r['origem']} -[{r['rel']}]-> {r['destino']}" for r in relacoes
-        )
-        return (
-            f"=== ENTIDADES DO GRAFO ===\n{bloco_entidades}\n\n"
-            f"=== RELAÇÕES ===\n{bloco_relacoes}\n\n"
-        )
+        # agrupa cada relação pela semente que a originou
+        grupos: dict[str, list[str]] = {}
+        for r in relacoes:
+            saindo = r["eid_origem"] in sementes
+            if saindo:
+                eid_s, seta = r["eid_origem"], f"-[{r['rel']}]->"
+                viz = no(r["destino"], r["desc_destino"], r["eid_destino"])
+            else:
+                eid_s, seta = r["eid_destino"], f"<-[{r['rel']}]-"
+                viz = no(r["origem"], r["desc_origem"], r["eid_origem"])
+            grupos.setdefault(eid_s, []).append(f"  {seta} {viz}")
+
+        linhas = []
+        for eid_s, itens in grupos.items():
+            s = sementes[eid_s]
+            linhas.append(no(s["nome"], s.get("descricao", ""), eid_s))
+            linhas.extend(itens)
+
+        return "=== GRAFO: ENTIDADES E RELAÇÕES ===\n" + "\n".join(linhas) + "\n\n"
 
     @staticmethod
     def _formatar_chunks(chunks: list[dict], consulta: str = "") -> str:
@@ -165,27 +197,15 @@ class HybridRetriever:
         seeds = [{"eid": r["eid"], "score": r["score"]} for r in nos_entrada]
 
         relacoes: list[dict] = []
-        # chunks_extras: list[dict] = []
+        fontes: dict = {}
         if seeds:
             relacoes = self._relacoes_do_grafo(seeds, vec)
-            # todos = set(eids)
-            # for r in relacoes:
-            #     todos.update((r["eid_origem"], r["eid_destino"]))
-            # chunks_extras = self._chunks_do_grafo(
-            #     list(todos), excluir=[c["id"] for c in chunks_base], vec=vec
-            # )
+            fontes = self._fontes_das_entidades(relacoes) if relacoes else {}
 
         chunks = (
             self._filtrar_um_por_artigo(chunks_base) if um_por_artigo else chunks_base
         )
 
-        logger.debug(
-            "GraphRAG: %d chunks, %d entidades, %d relações",
-            len(chunks_base),
-            len(nos_entrada),
-            len(relacoes),
-            # len(chunks_extras),
-        )
-        return self._formatar_relacoes(nos_entrada, relacoes) + self._formatar_chunks(
-            chunks, pergunta
-        )
+        return self._formatar_relacoes(
+            nos_entrada, relacoes, fontes
+        ) + self._formatar_chunks(chunks, pergunta)
