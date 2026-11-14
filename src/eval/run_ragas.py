@@ -26,9 +26,12 @@ ROOT = Path(__file__).resolve().parent
 
 PROMPT = """Você é um assistente do Programa Meninas Digitais.
 Responda à pergunta usando APENAS o contexto abaixo. Se o contexto não contiver a
-resposta, diga que não encontrou. Cite as fontes pelo título do artigo. Em perguntas
-de lista, liste todos os itens encontrados, com nomes próprios de projetos, locais
-e instituições.
+resposta, diga que não encontrou.
+
+Regras:
+- Analise TODOS os trechos e relações fornecidos antes de responder, extraindo itens de todos os artigos relevantes.
+- Extraia de cada item encontrado nomes próprios de projetos, ações, locais e instituições.
+- Depois de cada item, cite obrigatoriamente a fonte no formato: [FONTE: Título exato do artigo].
 
 {relacoes}
 
@@ -63,26 +66,21 @@ r = HybridRetriever.get_instance()
 emb = r.embedding_model
 
 gen_llm = init_chat_model(
-    model="gemma4:12b",
-    model_provider="ollama",
-    base_url="http://localhost:11434",
-    temperature=0,
-    num_ctx=24576,
+    model="gemini-3.5-flash-lite",
+    model_provider="google_genai",
     num_predict=4096,
-    reasoning=False,  # evita que o thinking consuma num_predict e deixe a resposta vazia
 )
 
 # Cliente assíncrono conectado ao Ollama (as métricas `collections` usam ascore)
-client = AsyncOpenAI(base_url="http://localhost:11435/v1", api_key="ollama")
+client = AsyncOpenAI(base_url="http://localhost:11434/v1", api_key="ollama")
 
 judge_llm = llm_factory(
-    model="qwen3.5:9b-q8_0",
+    model="qwen3.8:27b",
     provider="openai",
     client=client,
     temperature=0.0,
-    max_tokens=16384,
-    # Desliga o thinking do juiz (Ollama /v1). Testado: só reasoning_effort
-    # funciona; extra_body={"think": False} é ignorado nesta versão.
+    max_tokens=8192,
+    # Desliga o thinking do juiz (Ollama). Testado: só reasoning_effort funciona.
     reasoning_effort="none",
 )
 

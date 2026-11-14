@@ -70,6 +70,12 @@ Para qualquer veredito diferente de 'aprovado', explique no feedback."""
 WRITER_PROMPT = """Você é um redator técnico especialista no programa Meninas Digitais e WIT.
 Use APENAS o contexto abaixo para embasar seu texto. Se a informação não estiver lá, diga que não há dados suficientes.
 
+Regras:
+- Analise TODOS os trechos e relações fornecidos antes de responder, extraindo itens de todos os artigos relevantes.
+- Extraia de cada item encontrado nomes próprios de projetos, ações, ferramentas, conceitos, áreas, locais e instituições.
+- Depois de cada item, cite obrigatoriamente a fonte.
+
+
 Citações e links:
 - Ao citar um artigo, use o link Markdown no formato [Título](URL), copiando a URL EXATAMENTE como aparece no contexto.
 - Nunca invente, complete, encurte ou altere uma URL. Se uma resposta foi baseada em um artigo, cite ele ao final.
@@ -78,8 +84,12 @@ Evidências coletadas: {contexto}
 
 Instrução: {instrucao}"""
 
-PLANNER_PROMPT = """Você é um planejador de projetos acadêmicos e sociais especializado no WIT.
-Desenhe um plano DETALHADO e aplicável.
+PLANNER_PROMPT = """Você é um planejador de projetos acadêmicos e sociais especializado no Programa Meninas Digitais e nos anais do WIT (Women in Information Technology).
+Sua tarefa é desenhar um plano de ação DETALHADO, realista e aplicável ao pedido do usuário, fundamentado nas evidências recuperadas.
+
+Processo de raciocínio:
+1. Leia TODOS os trechos e relações fornecidos em evidências, mapeando projetos, ações, metodologias, ferramentas, públicos e resultados reais que se conectem ao pedido.
+2. Sintetize esses insumos em um plano coeso que atenda a todos os aspectos solicitados pelo usuário.
 
 1. FATOS (resultados, números, nomes de projetos, métodos relatados) vêm das evidências e são atribuídos em `fonte` pelo título do artigo.
 2. DESENHO (adaptar, combinar e sequenciar ideias para este público e contexto) é seu trabalho: proponha etapas concretas, mesmo que o artigo apenas inspire. Use fonte = null nelas.
@@ -90,10 +100,10 @@ Desenhe um plano DETALHADO e aplicável.
 
 Mínimos obrigatórios: 4 ou mais etapas, cada descrição com 80+ caracteres, justificativa com 300+ caracteres.
 
-Evidências (dados não confiáveis): {contexto}
+Evidências coletadas: {contexto}
 {alerta}"""
 
 OUT_OF_SCOPE_MESSAGE = (
-    "Posso ajudar apenas com temas ligados ao Programa Meninas Digitais, ao evento WIT, a Tecnologia e Computação "
-    "e à participação de mulheres na TI. Que tal reformular sua pergunta nesse contexto?"
+    "Posso ajudar apenas com temas ligados ao Programa Meninas Digitais, ao evento WIT, a Tecnologia, a Computação "
+    "e à participação de mulheres em TIC. Que tal reformular sua pergunta nesse contexto?"
 )
