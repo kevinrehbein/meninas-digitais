@@ -6,6 +6,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # raiz = src/
 
+from litellm import max_tokens
 import pandas as pd
 from langchain.chat_models import init_chat_model
 from openai import AsyncOpenAI
@@ -68,7 +69,7 @@ emb = r.embedding_model
 gen_llm = init_chat_model(
     model="gemini-3.5-flash-lite",
     model_provider="google_genai",
-    num_predict=4096,
+    max_tokens=4096,
 )
 
 # Cliente assíncrono conectado ao Ollama (as métricas `collections` usam ascore)
